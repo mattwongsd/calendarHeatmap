@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<link rel="stylesheet" href="resources/bootstrap/css/bootstrap.css">
+		<link rel="stylesheet" href="resources/bootstrap/css/bootstrap-theme.css">
+		<link rel="stylesheet" href="css/style.css">
+	</head>
+	
+	<script src="resources/jquery-2.2.4.js"></script>
+	<script src="resources/jquery-ui-1.12.1/jquery-ui.js"></script>
+	<script src="resources/bootstrap/js/bootstrap.js"></script>
+	<script src="resources/papaparse.js"></script>
+	<script src="https://d3js.org/d3.v4.js"></script>
+	
+	<script type="text/javascript" src="resources/bootstrap-multiselect.js"></script>
+	<link rel="stylesheet" href="css/bootstrap-multiselect.css" type="text/css"/>
+	
+<body>
+	<div id=dataManager>
+		<h3> Please Select a CSV file</h3>
+		<input type="file" id="dataFile" onchange="handleFiles(this.files)">
+	</div>
+</body>
+
+<script>	
+	function handleFiles(files) {
+		Papa.parse(files[0], {complete: function(dataObject) {
+			console.log(dataObject);
+			var columns = d3.keys(dataObject.data[0]);
+			dataManager(columns, dataObject.data);
+			}, header:true}
+		);
+	}
+	
+	function dataManager(columns, data) {		
+		var title = "<h3> Please select measures and categories </h3>";
+		$("#dataManager").append(title);
+		
+		var table = document.createElement("table");
+		$(table).attr("id", "columnTable");
+		$(table).addClass("table table-condensed table-nonfluid");
+		$(table).append("<thead><tr><td><b>Columns</b></td></tr></thead>");
+		
+		// populate the table with the columns in the csv file
+		columns.forEach(function(column, index) {
+			$(table).append("<tr><td>" + column + "</td></tr>");
+		});
+		$("#dataManager").append(table);
+		
+		var measuresTable = document.createElement("table");
+		$(measuresTable).attr("id", "measuresTable");
+		$(measuresTable).addClass("table table-condensed table-nonfluid");
+		$(measuresTable).append("<thead><tr><td><b>Measures</b></td></tr></thead>");
+		$("#dataManager").append(measuresTable);
+		
+		var categoriesTable = document.createElement("table");
+		$(categoriesTable).attr("id", "categoriesTable");
+		$(categoriesTable).addClass("table table-condensed table-nonfluid");
+		$(categoriesTable).append("<thead><tr><td><b>Categories</b></td></tr></thead>");
+		$("#dataManager").append(categoriesTable);
+		
+		/* Get all rows from your 'table' but not the first one 
+		* that includes headers. */
+		var rows = $('#columnTable tr').not(':first');
+
+		/* Create 'click' event handler for rows */
+		rows.on('click', function(e) {
+			/* Get current row */
+			var row = $(this);
+
+			/* Check if 'Ctrl', 'cmd' or 'Shift' keyboard key was pressed
+			* 'Ctrl' => is represented by 'e.ctrlKey' or 'e.metaKey'
+			* 'Shift' => is represented by 'e.shiftKey' */
+			if ((e.ctrlKey || e.metaKey) || e.shiftKey) {
+				/* If pressed highlight the other row that was clicked */
+				row.addClass('highlight');
+			} else {
+			/* Otherwise just highlight one row and clean others */
+				rows.removeClass('highlight');
+				row.addClass('highlight');
+			}
+		});	
+		
+		var addToMeasuresButton = document.createElement("button");
+		$(addToMeasuresButton).addClass("btn btn-primary");
+		addToMeasuresButton.innerHTML = "Add to measures";
+		$(addToMeasuresButton).on("click", function(){
+			addColumn(table, measuresTable)
+		});
+		
+		var addToCategoriesButton = document.createElement("button");
+		$(addToCategoriesButton).addClass("btn btn-primary");
+		addToCategoriesButton.innerHTML = "Add to categories";
+		$(addToCategoriesButton).on("click", function(){
+			addColumn(table, categoriesTable)
+		});
+		
+		var plotGraphButton = document.createElement("button");
+		$(plotGraphButton).addClass("btn btn-success");
+		plotGraphButton.innerHTML = "Plot calendar heatmap";
+		$(plotGraphButton).on("click", function() {
+			if ($("#categoriesTable td").length <= 1 || $("#measuresTable td").length <= 1) {
+				alert("please fill out measures or categories table");
+			}
+			else {
+				var catMeasures = initData();
+				$("#dataManager").remove();
+				data.categories = catMeasures.categories;
+				data.measures = catMeasures.measures;
+				initGraph(data);
+			}
+		});
+		
+		$("#dataManager").append(addToMeasuresButton);
+		$("#dataManager").append(addToCategoriesButton);
+		$("#dataManager").append(plotGraphButton);
+		
+	}
+	
+	function addColumn(columnTable, targetTable) {
+		$("tr.highlight > td").each(function(index){
+			var columnToAdd = $(this).text();
+			$(columnTable).find("td:contains('" + columnToAdd + "')").closest('tr').remove();
+			$(targetTable).append("<tr><td>" + columnToAdd + "</td></tr>");
+		});
+	}
+	
+	function initData() {
+		var data = {};
+		data.measures = [];
+		data.categories = [];
+		
+		$("#measuresTable td").not(":first").each(function(index){
+			data.measures.push($(this).text());
+		});
+		$("#categoriesTable td").not(":first").each(function(index){
+			data.categories.push($(this).text());
+		});
+		
+		return data;
+	}
+	
+	
+	
+</script>
+
+</html>

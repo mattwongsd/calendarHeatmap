@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<link rel="stylesheet" href="resources/bootstrap/css/bootstrap.css">
+		<link rel="stylesheet" href="resources/bootstrap/css/bootstrap-theme.css">
+		<link rel="stylesheet" href="resources/jquery-ui-1.12.1/jquery-ui.css">
+		<link rel="stylesheet" href="css/style.css">
+	</head>
+	
+	<script src="resources/jquery-2.2.4.js"></script>
+	<script src="resources/jquery-ui-1.12.1/jquery-ui.js"></script>
+	<script src="resources/bootstrap/js/bootstrap.js"></script>
+	<script src="resources/papaparse.js"></script>
+	<script src="resources/d3.js"></script>
+	<script src="resources/d3-scale-chromatic.js"></script>
+	
+	<script src="segmentView.js"></script>
+	<script src="monthlyView.js"></script>
+	<script src="firstScreen.js"></script>
+	<script src="weekView.js"></script>
+	
+	
+	<script type="text/javascript" src="resources/bootstrap-multiselect.js"></script>
+	<link rel="stylesheet" href="css/bootstrap-multiselect.css" type="text/css"/>
+	
+<body>
+	<div class="container">
+		<div class="row" id="inputRow">
+			<h3> Please select a CSV file </h3>
+			<input type="file" id="dataFile" onchange="handleFiles(this.files)">
+		</div>
+		<div class="row table-row" id="table-rows">
+			<div id="columnTableDiv" class="col-md-3 gridcell"></div>
+			<div id="categoryTableDiv" class="col-md-3 gridcell"></div>
+			<div id="measureTableDiv" class="col-md-3 gridcell"></div>
+			<div id="timeFieldTableDiv" class="col-md-3 gridcell"></div>
+		</div>
+		<div class="row" id="buttonsRow"> </div>
+		
+	</div>
+</body>
+
+<script>		
+	var pivotMode = false;
+	var drillInMode = false;
+	var dataInfo = {};
+	
+	function handleFiles(files) {
+		Papa.parse(files[0], {complete: function(dataObject) {
+			var columns = d3.keys(dataObject.data[0]);
+			firstScreen(columns, dataObject.data);
+			}, header:true}
+		);
+	}
+	
+	var formatYear = d3.timeFormat("%Y");
+	var formatDay = d3.timeFormat("%a");
+	var formatMonthName = d3.timeFormat("%B");
+	
+	var monthParse = d3.timeParse("%B");
+	var monthIntegerParase = d3.timeParse
+	var yearParse = d3.timeParse("%Y");
+	
+	function initializePanel(data) {				
+		var container = $("#container");
+		var containerRow = $("#containerRow1");
+		var leftPanel = $("#leftPanel");
+		var rightPanel = $("#rightPanel");
+		var panel = $("#data-control-panel");
+		var panelBody = $("#leftPanelBody");
+		
+		$(["<div class='form-group'>",
+			"<label class='control-label for='view'>View</label>",
+			"<select class='form-control' id='view'>",
+			"</select>",
+		"</div>"
+		].join("\n")).appendTo(panelBody);
+
+		initViewListener(data);
+		$('#view').val('Categorical');
+		
+		var yearDiv = $("<div class='form-group'></div>").appendTo(panelBody);
+		$(yearDiv).append("<label class='control-label' for='year'>Year</label>");
+		var year = $("<select class='form-control' id='year'></select>").appendTo(yearDiv);
+		
+		var monthDiv = $("<div class='form-group'></div>").appendTo(panelBody);
+		$(monthDiv).append("<label class='control-label' for='month'>Month</label>");
+		var month = $("<select class='form-control' id='month'></select>").appendTo(monthDiv);
+		
+		var categoryDiv = $("<div class='form-group'></div>").appendTo(panelBody);
+		var categoryLabel = $("<label class='control-label for='category'>Category</label>").appendTo(categoryDiv);
+		var category = $("<select class='form-control' id='category'></select>").appendTo(categoryDiv);
+		
+		var categoryValueDiv = $("<div class='form-group'></div>").appendTo(panelBody);
+		var categoryValueLabel = $("<label class='control-label for='categoryValue'>Category Values</label>").appendTo(categoryValueDiv);
+		var categoryValue = $("<select class='form-control' multiple='multiple' id='categoryValue'></select>").appendTo(categoryValueDiv);
+		
+		var operationDiv = $("<div class='form-group'></div>").appendTo(panelBody);
+		$(operationDiv).append("<label class='control-label' for='operation'>Colour</label>");
+		var operation = $("<select class='form-control' id='operation'></select>").appendTo(operationDiv);
+		$("<option>count</option>").appendTo(operation);
+		$("<option>sum</option>").appendTo(operation);
+		$("<option>avg</option>").appendTo(operation);
+		
+		var measureDiv = $("<div class='form-group'></div>").appendTo(panelBody);
+		$(measureDiv).append("<label class='control-label' for='measure'>Measure</label>");
+		var measure = $("<select class='form-control' id='measure'></select>").appendTo(measureDiv);
+		
+		var filteredDataByCategoryValue;
+		var filteredDataByYear;
+		var category = '';
+		var categoryValue = '';
+		var years = [];
+		var year = '';
+		var months = [];
+		var month = '';
+		
+		d3.select("#category").selectAll("option")
+		.data(dataInfo.categories.sort())
+		.enter()
+		.append("option")
+		.text(function(d){return d;});
+		
+		category = $("#category").find(':selected').text();
+		d3.select("#categoryValue").selectAll("option")
+			.data(d3.map(data, function(d){return d[category];}).keys().sort())
+			.enter()
+			.append("option")
+			.text(function(d){return d;});
+		$("#categoryValue").multiselect();
+				
+		categoryValue = $("#categoryValue").find(':first').text();
+		filteredDataByCategoryValue = data.filter(function(d){ return categoryValue == d[category]; });
+		years = d3.map(filteredDataByCategoryValue, function(d){return new Date(d[dataInfo.dateField]).getFullYear();}).keys();
+		years = years.map(Number);
+		years.sort(function(a, b) {
+		  return a - b;
+		});
+		d3.select("#year").selectAll("option")
+			.data(years)
+			.enter()
+			.append("option")
+			.text(function(d){return d;});
+				
+		year = $("#year").find(':selected').text();
+		filteredDataByYear = filteredDataByCategoryValue.filter(function(d){ return year == new Date(d[dataInfo.dateField]).getFullYear(); });
+		months = d3.map(filteredDataByYear, function(d){return new Date(d[dataInfo.dateField]).getMonth();}).keys();
+		months = months.map(Number);
+		months.sort(function(a, b) {
+		  return a - b;
+		});
+		d3.select("#month").selectAll("option")
+			.data(months)
+			.enter()
+			.append("option")
+			.text(function(d){return formatMonthName(new Date(year, d));});
+			
+		d3.select("#measure").selectAll("option")
+			.data(dataInfo.measures.sort())
+			.enter()
+			.append("option")
+			.text(function(d){return d;});
+		
+		var legendDiv = $("<div id='legend'></div>").appendTo(panelBody);
+		$(legendDiv).append("<label>Legend</label>");
+		
+		var pivot = $( "<button>", {
+						"class": "btn btn-default",
+						"id": "pivot",
+						"data-toggle":"button",
+						"aria-pressed":false
+		}).appendTo(panelBody);
+		
+		pivot.html("Pivot category against time");
+		
+		pivot.on("click", function(){
+			if (pivotMode == true) {
+				pivotMode = false;
+			} else {
+				pivotMode = true;
+			}
+		});
+		
+		var drillIn = $( "<button>", {
+						"class": "btn btn-default",
+						"id": "drillIn",
+						"data-toggle":"button",
+						"aria-pressed":false
+		}).appendTo(panelBody);
+		
+		drillIn.html("Drill into week");
+		
+		drillIn.on("click", function(){
+			if (drillInMode == true) {
+				drillInMode = false;
+			} else {
+				drillInMode = true;
+			}
+		});
+	}
+	
+	function initGraph(data) {
+		console.log(dataInfo);
+		initializePanel(data);
+
+		d3.select("#rightPanel")
+					.append("svg")
+					.classed("mainSVG", true);
+
+		$("#categoryValue").change(function(){
+			plotGraph(data);
+		});
+		
+		$("#measure").change(function(){
+			plotGraph(data);
+		});
+		
+		$("#operation").change(function(){
+			plotGraph(data);
+		});
+		
+		$("#colour").change(function(){
+			plotGraph(data);
+		});
+		
+		$("#category").change(function(){
+			onChangeMonth(data);
+			plotGraph(data);
+		});
+		
+		$("#year").change(function(){
+			onChangeYear(data);
+			plotGraph(data);
+		});
+		
+		$("#month").change(function(){
+			onChangeMonth(data);
+			plotGraph(data);
+		});
+	}
+	
+	function onChangeYear(data) {
+		var currentYear = $("#year").find(':selected').text();
+		
+		var filteredData = data.filter(function(d){
+			var date = new Date(d[dataInfo.dateField]);
+			return date.getFullYear() == currentYear;
+		});
+		
+		var months = d3.set();
+		filteredData.forEach(function(d) {
+			months.add(parseInt(new Date(d[dataInfo.dateField]).getMonth()));
+		});
+		months = months.values();
+		months = months.map(Number);
+		months.sort(function(a, b) {
+		  return a - b;
+		});
+		
+		$("#month > option").remove();
+		months.forEach(function(d, i, arr){
+			$("<option>" + formatMonthName(new Date(currentYear, d)) + "</option>").appendTo($("#month"));
+		});
+		
+		var category = $("#category").find(':selected').text();
+		var currentMonth = monthParse($("#month").find(':selected').text()).getMonth();
+		
+		filteredData = filteredData.filter(function(d){
+			var date = new Date(d[dataInfo.dateField]);
+			return date.getMonth() == currentMonth;
+		});
+		
+		var categories = d3.set();
+		filteredData.forEach(function(d) {
+			categories.add(d[category]);
+		});
+		categories = categories.values();
+		categories.sort();
+		
+		$("#categoryValue > option").remove();
+		categories.forEach(function(cat){
+			$("<option>" + cat + "</option>").appendTo($("#categoryValue"));
+		});
+		$("#categoryValue").multiselect('destroy');
+		$("#categoryValue").multiselect();
+		
+		
+	} //function onChangeYear
+	
+	//also called when main categoryValue is changed
+	function onChangeMonth(data) {
+		var currentYear = $("#year").find(':selected').text();
+		var category = $("#category").find(':selected').text();
+		var currentMonth = monthParse($("#month").find(':selected').text()).getMonth();
+		
+		var filteredData = data.filter(function(d){
+			var date = new Date(d[dataInfo.dateField]);
+			return date.getMonth() == currentMonth && date.getFullYear() == currentYear;
+		});
+		
+		var categories = d3.set();
+		filteredData.forEach(function(d) {
+			categories.add(d[category]);
+		});
+		categories = categories.values();
+		categories.sort();
+		
+		$("#categoryValue > option").remove();
+		categories.forEach(function(cat){
+			$("<option>" + cat + "</option>").appendTo($("#categoryValue"));
+		});
+		$("#categoryValue").multiselect('destroy');
+		$("#categoryValue").multiselect();
+	} //function onChangeDate
+	
+	function plotGraph(data) {
+		$('.legendSVG').remove();
+		$('.tooltip').remove();
+		$('.mainSVG').children().remove();
+		var cellSize = 50,
+		width = cellSize*7 + 90,
+		height = cellSize*7 + 100,
+		svgWidth = 1500,
+		svgHeight = 1500,
+		margin = {t:20, b:20, l:20, r:20};
+		
+		var svg = d3.select('.mainSVG')
+					.attr("width", svgWidth)
+					.attr("height", svgHeight);
+		
+		var selectedCategories = $('#categoryValue option:selected').map(function(a, item){return item.value;});
+		selectedCategories = $.makeArray(selectedCategories);
+
+		var level = 0;
+		var currentWidth = 0;
+		var calendarGroup = svg.selectAll("g")
+					.data(selectedCategories)
+				  .enter().append("g")
+					.attr("width", width)
+					.attr("height", height)
+					.attr("class", function(d){ return d.replace(/['"]+/g, ''); })
+					.attr("transform" , function(d,i) {
+						var toReturn;
+						if (currentWidth + width + margin.l + margin.r > svgWidth) {
+							currentWidth = 0;
+							level += 1;
+						}
+						toReturn = "translate(" + currentWidth + "," + (level*height + margin.t + margin.b) + ")";
+						currentWidth += width + margin.l + margin.r;
+						return toReturn;
+					})
+					.call(d3.drag()
+						.on("drag", dragged));
+
+		calendarGroup.append("text")
+			.attr("transform", "translate(20,10)")
+			.text(function(d) { return d; });
+		
+		var calendarPadding = {l: 20, t: 50};
+		
+		var days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+		days.forEach(function(d, i, arr) {
+			calendarGroup.append("text")
+				.attr("transform", "translate(" + (cellSize/2 + cellSize*i+calendarPadding.l) + "," + calendarPadding.t/2 + ")")
+				.text(d)
+				.style("text-anchor", "middle");
+		});
+		
+		var currentYear = $("#year").find(':selected').text();
+		var currentMonth = monthParse($("#month").find(':selected').text()).getMonth();
+		var rect = calendarGroup.selectAll("rect")
+					.data(function(d) { return d3.timeDays(new Date(currentYear, currentMonth), new Date(currentYear, currentMonth+1)); })
+				  .enter().append("rect")
+					.attr("width", cellSize)
+					.attr("height", cellSize)
+					.attr("class", function(d){ return d.getDate(); })
+					.attr("fill", "#fff")
+					.style("stroke", "#ccc")
+					.attr("x", function(d) { return d3.timeDay.count(d3.timeSunday(d), d) * cellSize + calendarPadding.l; })
+					.attr("y", function(d) { return d3.timeSunday.count(d3.timeMonth(d), d) * cellSize + calendarPadding.t; });
+		  
+		var category = $("#category").find(':selected').text();
+		var currentMeasure = $("#measure").find(':selected').text();
+		var currentOperation = $("#operation").find(':selected').text();
+		
+		
+		var filteredData = data.filter(function(d){
+			var date = new Date(d[dataInfo.dateField]);
+			return date.getMonth() == currentMonth && date.getFullYear() == currentYear && $.inArray(d[category], selectedCategories) > -1;
+		});
+		
+		var barMaxLength = 70;
+		
+		var weekBarData = d3.nest()
+		  .key(function(d) { return d[category]; })
+		  .key(function(d) { return calculateWeek(new Date(d[dataInfo.dateField])); })
+		  .rollup(function(v) { return {
+			count: v.length,
+			sum: d3.sum(v, function(d) { return d[currentMeasure]; }),
+			avg: d3.mean(v, function(d) { return d[currentMeasure]; }),
+		  }; })
+		  .entries(filteredData);
+		  
+		var dayBarData = d3.nest()
+		  .key(function(d) { return d[category]; })
+		  .key(function(d) { return new Date(d[dataInfo.dateField]).getDay(); })
+		  .rollup(function(v) { return {
+			count: v.length,
+			sum: d3.sum(v, function(d) { return d[currentMeasure]; }),
+			avg: d3.mean(v, function(d) { return d[currentMeasure]; }),
+		  }; })
+		  .entries(filteredData);
+		  
+		var weekBarDataMin = d3.min(weekBarData, function(d){
+			return d3.min(d.values, function(v){
+				return v.value[currentOperation];
+			})
+		});
+		
+		var weekBarDataMax = d3.max(weekBarData, function(d){
+			return d3.max(d.values, function(v){
+				return v.value[currentOperation];
+			})
+		});
+		  
+		var weekBarScale = d3.scaleLinear().domain([0, weekBarDataMax]).range([0,barMaxLength]);
+
+		weekBarData.forEach(function(d){
+			d.values.forEach(function(v){
+				d3.select('[class="' + d.key + '"]').append("rect")
+					.attr("width", function(d) { return weekBarScale(v.value[currentOperation]); })
+					.attr("height", 20)
+					.attr("fill", "steelblue")
+					.attr("x", (7*cellSize+calendarPadding.l+5))
+					.attr("y", function(d) { return (cellSize*(v.key-1)+calendarPadding.t+cellSize/4); })	
+					.datum(v.value)
+					.on("mouseover", function(d){
+						tooltip.transition()
+						 .duration(200)
+						 .style("opacity", .9);
+						
+						tooltip.html(currentOperation + ": " + d[currentOperation])
+						 .style("left", (d3.event.pageX) + "px")
+						 .style("top", (d3.event.pageY - 28) + "px");
+					})
+					.on("mouseout", function(d){
+						tooltip.transition()
+						 .duration(500)
+						 .style("opacity", 0);
+					});
+			});
+		});
+		
+		var dayBarDataMin = d3.min(dayBarData, function(d){
+			return d3.min(d.values, function(v){
+				return v.value[currentOperation];
+			})
+		});
+		
+		var dayBarDataMax = d3.max(dayBarData, function(d){
+			return d3.max(d.values, function(v){
+				return v.value[currentOperation];
+			})
+		});
+		
+		var dayBarScale = d3.scaleLinear().domain([0, dayBarDataMax]).range([0,barMaxLength]);
+		
+		var noOfWeeks = weekCount(currentYear, currentMonth+1);
+		
+		dayBarData.forEach(function(d){
+			d.values.forEach(function(v){
+				d3.select('[class="' + d.key + '"]').append("rect")
+					.attr("width",  20)
+					.attr("height", function(d) { return dayBarScale(v.value[currentOperation]);})
+					.attr("fill", "steelblue")
+					.attr("x", function(d) { return (cellSize*(v.key)+calendarPadding.l+cellSize/4); })
+					.attr("y", function(d) { return (calendarPadding.t+noOfWeeks*cellSize+5); })	
+					.datum(v.value)
+					.on("mouseover", function(d){
+						tooltip.transition()
+						 .duration(200)
+						 .style("opacity", .9);
+						
+						tooltip.html(currentOperation + ": " + d[currentOperation])
+						 .style("left", (d3.event.pageX) + "px")
+						 .style("top", (d3.event.pageY - 28) + "px");
+					})
+					.on("mouseout", function(d){
+						tooltip.transition()
+						 .duration(500)
+						 .style("opacity", 0);
+					});
+			});
+		});		
+		
+		var colour = d3.scaleSequential(d3.interpolateOranges);
+		
+		var requiredData = d3.nest()
+		  .key(function(d) { return d[category]; })
+		  .key(function(d) { return new Date(d[dataInfo.dateField]).getDate(); })
+		  .rollup(function(v) { return {
+			count: v.length,
+			sum: d3.sum(v, function(d) { return d[currentMeasure]; }),
+			avg: d3.mean(v, function(d) { return d[currentMeasure]; }),
+		  }; })
+		  .entries(filteredData);
+		
+		var min = d3.min(requiredData, function(d){
+			return d3.min(d.values, function(v){
+				return v.value[currentOperation];
+			})
+		});
+		
+		var max = d3.max(requiredData, function(d){
+			return d3.max(d.values, function(v){
+				return v.value[currentOperation];
+			})
+		});
+		
+		colour.domain([min, max]);
+		
+		var tooltip = d3.select("body").append("div")
+			.attr("class", "tooltip")
+			.style("opacity", 0);
+		
+		requiredData.forEach(function(d){
+			d.values.forEach(function(v){
+				d3.select("[class='" + d.key.replace(/['"]+/g, '') + "'] > rect[class='" + new Date(currentYear, currentMonth, v.key).getDate() + "']")
+					.attr("fill", colour(v.value[currentOperation]))
+					.datum(v)
+					.on("mouseover", function(e){
+						tooltip.transition()
+						 .duration(200)
+						 .style("opacity", .9);
+						
+						tooltip.html("Date: " + (new Date(currentYear, currentMonth, e.key)).getDate() + "<br>" + currentOperation + ": " + v.value[currentOperation])
+						 .style("left", (d3.event.pageX) + "px")
+						 .style("top", (d3.event.pageY - 28) + "px");
+					})
+					.on("mouseout", function(d){
+						tooltip.transition()
+						 .duration(500)
+						 .style("opacity", 0);
+					});
+			});
+		});
+		var legendWidth = 200;
+		var legendHeight = 300;
+		var legendSVG = d3.select("#legend").append("svg")
+							.attr("width", legendWidth)
+							.attr("height", legendHeight)
+							.classed("legendSVG", true);
+		
+		var legend = legendSVG.append("defs")
+						 .append("svg:linearGradient")
+						 .attr("id", "gradient")
+						 .attr("x1", "100%")
+						 .attr("y1", "0%")
+						 .attr("x2", "100%")
+						 .attr("y2", "100%")
+						 .attr("spreadMethod", "pad");
+		
+		legend.append("stop").attr("offset", "0%")
+							 .attr("stop-color", colour(min))
+							 .attr("stop-opacity", 1);
+
+		legend.append("stop").attr("offset", "100%")
+							 .attr("stop-color", colour(max))
+							 .attr("stop-opacity", 1);
+
+		legendSVG.append("rect").attr("width", 40)
+						  .attr("height", legendHeight-50)
+						  .style("fill", "url(#gradient)")
+						  .attr("transform", "translate(" + legendWidth/2 + ",20)");
+		
+		var colourAxisScale = d3.scaleLinear().domain([min,max]).range([0,legendHeight-50]);
+		
+		var legendAxis = d3.axisLeft().scale(colourAxisScale).ticks(5);
+
+		legendSVG.append("g").attr("class", "y axis")
+								.attr("transform", "translate(" + (legendWidth/2+1) + ",20)")
+								.call(legendAxis);
+		
+		$(".mainSVG > g > rect").on("click", function(e){
+			if (pivotMode == true) {
+				pivotMode = false;
+				var upperInfo = {};
+				upperInfo.categoryValue = $(this).parent().attr("class");
+				upperInfo.category = $("#category").find(':selected').text();
+				upperInfo.year = $("#year").find(':selected').text();
+				upperInfo.month = $("#month").find(':selected').text();
+				upperInfo.measure = $("#measure").find(':selected').text();
+				upperInfo.operation = $("#operation").find(':selected').text();
+				$(".mainSVG").remove();
+				$("#leftPanelBody").children().remove();
+				tooltip.remove();
+				initMonthlyView(data, upperInfo);
+			}
+			if (drillInMode == true) {
+				drillInMode = false;
+				var upperInfo = {};
+				upperInfo.categoryValue = $(this).parent().attr("class");
+				upperInfo.category = $("#category").find(':selected').text();
+				upperInfo.year = $("#year").find(':selected').text();
+				upperInfo.month = monthParse($("#month").find(':selected').text()).getMonth();
+				upperInfo.measure = $("#measure").find(':selected').text();
+				upperInfo.operation = $("#operation").find(':selected').text();
+				upperInfo.week = calculateWeek(new Date(currentYear, currentMonth, $(this).attr("class")));
+				$(".mainSVG").remove();
+				$("#leftPanelBody").children().remove();
+				tooltip.remove();
+				initWeekView(data, upperInfo);
+			}
+			
+		});
+	} //function plotGraph
+	
+	function calculateWeek(date) {
+		var day = date.getDate()
+
+		//get weekend date
+		day += (date.getDay() == 0 ? 0 : 7 - date.getDay());
+
+		return Math.ceil(parseFloat(day) / 7);
+	}
+	
+	function weekCount(year, month_number) {
+
+		// month_number is in the range 1..12
+
+		var firstOfMonth = new Date(year, month_number-1, 1);
+		var lastOfMonth = new Date(year, month_number, 0);
+
+		var used = firstOfMonth.getDay() + lastOfMonth.getDate();
+
+		return Math.ceil( used / 7);
+	}
+	
+	function initViewListener(data) {
+		var list = ['Segment','Categorical','Week','Monthly'];
+		list.sort();
+		d3.select("#view").selectAll("option")
+			.data(list)
+			.enter()
+			.append("option")
+			.text(function(d){return d;});
+		
+		$('#view').change(function(){
+			var text = $(this).find(':selected').text();
+			if (text == 'Categorical') {
+				$(".mainSVG").remove();
+				$("#leftPanelBody").children().remove();
+				initGraph(data);
+			}
+			if (text == 'Segment') {
+				$("#leftPanelBody").children().remove();
+				initSegmentView(data);
+			}
+			if (text == 'Week') {
+				$("#leftPanelBody").children().remove();
+				initWeekView(data);
+			}
+			if (text == 'Monthly') {
+				$("#leftPanelBody").children().remove();
+				initMonthlyView(data);
+			}
+		});
+	}
+	
+	function dragged(d) {
+	  d3.select(this).attr("transform", "translate(" + (d3.event.x) + "," + (d3.event.y) + ")");
+	}
+	
+</script>
+
+</html>

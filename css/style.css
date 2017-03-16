@@ -1,0 +1,45 @@
+/* .table-nonfluid {
+   width: auto !important;
+} */
+
+.highlight { 
+	background: orange;
+}
+
+.inline-panel,
+.inline-panel .panel-body {
+  display: inline-block;
+}
+
+.tooltip {
+  position: absolute;
+  text-align: center;
+  width: 60px;
+  height: 28px;
+  padding: 2px;
+  font: 12px sans-serif;
+  background: lightsteelblue;
+  border: 0px;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.gridcell {
+	border-style: ridge;
+}
+
+.btn {
+	margin: 2px 2px 2px 2px;
+}
+
+rect[fill='#fff'] {
+	opacity: 0.8;
+}
+
+g:not[class='noBorder']{
+	outline: thin solid red;
+}
+
+svg {
+	outline: thin solid blue;
+}
